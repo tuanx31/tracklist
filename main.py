@@ -2,261 +2,367 @@ import os
 from mutagen.mp3 import MP3
 import datetime
 from tkinter import *
-from tkinter import filedialog
+from tkinter import filedialog, scrolledtext
+from tkinter import ttk
 import cv2
 
 
-t = Tk()
-duration = 0  # bien thoi gian global
-lap = 1  # bien lap
-# hàm xử lí thời gian
-
-
-def xu_li_file(file_txt):
-    with open(file_txt, "rb+") as f:
-        f.seek(-9, os.SEEK_END)  # Đưa con trỏ đến vị trí cần xóa
-        f.truncate()  # Xóa các byte kế tiếp vị trí đó
-        f.close()
-
-
-def last_char(file_txt):
-    global last_nine_chars
-    with open(file_txt, "r") as f:
-        last_nine_chars = file_txt[-9:]
-
-
-def time(seconds):
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    seconds = seconds % 60
-    return (hours, minutes, int(seconds))
-
-# hàm get path file
-
-
-def open_file():
-    path = filedialog.askdirectory()
-    return path
-
-# get path file txt
-
-
-def filetxt(path):
-    file_name = 'AAAAAAA.txt'
-    file_dic = os.path.join(path, file_name)
-    file_name = file_dic.encode('utf-8')
-    print(file_name.decode('utf-8'))
-    if file_name:
-        path_var.set(file_name.decode('utf-8'))
-    return file_name.decode('utf-8')
-
-
-def file_goc(file_txt):
-    f = open(file_txt, 'w', encoding="utf-8")
-    f.write("Tracklist:\n")
-    f.close()
-
-
-def khoi_tao_file(file_txt):
-    global duration
-    (hours, minutes, seconds) = time(duration)
-    delta = datetime.timedelta(
-        hours=hours, minutes=minutes, seconds=(seconds))
-    f = open(file_txt, 'a', encoding="utf-8")
-    f.write(str(delta)+" ")
-    f.close()
-
-
-def leng(file, file_txt, path):
-    global duration
-
-    for t, dirs, files in os.walk(os.path.abspath(path)):
-        if file.endswith(".mp3"):
-            audio = MP3(os.path.join(t, file))
-            duration = duration + (audio.info.length)
-            (hours, minutes, seconds) = time(duration)
-            delta = datetime.timedelta(
-                hours=hours, minutes=minutes, seconds=(seconds))
-            f = open(file_txt, 'a', encoding="utf-8")
-            print(delta)
-
-            # f.write(name_file+"\n",)
-            f.write(str(delta)+" ")
-        if file.endswith(".mp4"):
-            filename = os.path.join(t, file)
-            cap = cv2.VideoCapture(filename)
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            duration += frame_count / fps
-            (hours, minutes, seconds) = time(duration)
-            delta = datetime.timedelta(
-                hours=hours, minutes=minutes, seconds=(seconds))
-            f = open(file_txt, 'a', encoding="utf-8")
-            print(delta)
-            f.write(str(delta)+" ")
-
-
-def name_file(file, file_txt, path):
-    global duration
-    for t, dirs, files in os.walk(os.path.abspath(path)):
-        if file.endswith(".mp3"):
-            namefile = os.path.basename(file)
-            name_filee = namefile.encode('utf-8').decode('utf-8')
-            name_file = os.path.splitext(name_filee)[0]
-            print(name_file)
-            f = open(file_txt, 'a+', encoding="utf-8")
-            f.write(name_file+"\n",)
-            f.close()
-        if file.endswith(".mp4"):
-            namefile = os.path.basename(file)
-            name_filee = namefile.encode('utf-8').decode('utf-8')
-            name_file = os.path.splitext(name_filee)[0]
-            print(name_file)
-            f = open(file_txt, 'a+', encoding="utf-8")
-            f.write(name_file+"\n",)
-            f.close()
-
-
-def details(path, file_txt):
-
-    for t, dirs, files in os.walk(os.path.abspath(path)):
-        for file in files:
-            name_file(file, file_txt, path)
-            leng(file, file_txt, path)
-
-
-def o_file():
-
-    path = path_var.get()
-    if path:
-        with open(path, "r", encoding="utf-8") as file:
-            contents = file.read()
-            text_box.delete("1.0", END)
-            text_box.insert(END, contents)
-
-
-def total_duration():
-    global duration
-    (hours, minutes, seconds) = time(duration)
-    delta = datetime.timedelta(
-        hours=hours, minutes=minutes, seconds=(seconds))
-    return delta
-
-
-def ghi_total_file(file_txt):
-    delta = total_duration()
-    f = open(file_txt, 'a', encoding="utf-8")
-    f.write(str(delta))
-    f.close()
-
-
-def loop(file_txt, path):
-    khoi_tao_file(file_txt)
-    details(path, file_txt)
-    xu_li_file(file_txt)
-    last_char(file_txt)
+class TracklistApp:
+    """Ứng dụng tạo tracklist từ các file MP3/MP4"""
+    
+    # Màu sắc cho các nút lặp
+    LAP_COLORS = {
+        2: '#ff0000',
+        3: '#ff9d00',
+        4: '#ffff00',
+        5: '#00ff1a',
+        6: '#00ddff',
+        7: '#4B0082',
+        8: '#c800ff',
+        9: '#c800ff',
+        10: '#ff0066'
+    }
+    
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Tracklist Generator")
+        self.root.geometry("800x700")
+        self.root.configure(bg='#2b2b2b')
+        
+        # Biến trạng thái
+        self.duration = 0
+        self.lap_count = 1
+        self.current_file_path = ""
+        self.lap_buttons = {}
+        
+        self.setup_ui()
+        
+    def setup_ui(self):
+        """Thiết lập giao diện người dùng"""
+        # Style
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure('TButton', padding=10, font=('Segoe UI', 10))
+        
+        # Frame chính
+        main_frame = Frame(self.root, bg='#2b2b2b', padx=20, pady=20)
+        main_frame.pack(fill=BOTH, expand=True)
+        
+        # Tiêu đề
+        title_label = Label(
+            main_frame,
+            text="🎵 Tracklist Generator",
+            font=('Segoe UI', 18, 'bold'),
+            bg='#2b2b2b',
+            fg='#ffffff'
+        )
+        title_label.pack(pady=(0, 20))
+        
+        # Frame chọn số lần lặp
+        lap_frame = LabelFrame(
+            main_frame,
+            text="Chọn số lần lặp",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#3c3c3c',
+            fg='#ffffff',
+            padx=15,
+            pady=15
+        )
+        lap_frame.pack(fill=X, pady=(0, 15))
+        
+        lap_inner = Frame(lap_frame, bg='#3c3c3c')
+        lap_inner.pack()
+        
+        # Tạo các nút lặp
+        for i in range(2, 11):
+            btn = Button(
+                lap_inner,
+                text=str(i),
+                command=lambda n=i: self.set_lap_count(n),
+                width=4,
+                height=2,
+                font=('Segoe UI', 10, 'bold'),
+                bg='#4a4a4a',
+                fg='#ffffff',
+                activebackground=self.LAP_COLORS[i],
+                activeforeground='#ffffff',
+                relief=RAISED,
+                bd=2
+            )
+            btn.pack(side=LEFT, padx=5)
+            self.lap_buttons[i] = btn
+        
+        # Hiển thị số lần lặp hiện tại
+        self.lap_display = Label(
+            lap_frame,
+            text=f"Lần lặp hiện tại: {self.lap_count}",
+            font=('Segoe UI', 10),
+            bg='#3c3c3c',
+            fg='#00ff88'
+        )
+        self.lap_display.pack(pady=(10, 0))
+        
+        # Frame các nút chức năng
+        button_frame = Frame(main_frame, bg='#2b2b2b')
+        button_frame.pack(fill=X, pady=(0, 15))
+        
+        # Nút chọn folder
+        self.select_folder_btn = Button(
+            button_frame,
+            text="📁 Chọn Folder Lưu Nhạc",
+            command=self.process_tracklist,
+            font=('Segoe UI', 11, 'bold'),
+            bg='#4CAF50',
+            fg='#ffffff',
+            activebackground='#45a049',
+            activeforeground='#ffffff',
+            relief=RAISED,
+            bd=3,
+            padx=20,
+            pady=10,
+            cursor='hand2'
+        )
+        self.select_folder_btn.pack(side=LEFT, padx=5, fill=X, expand=True)
+        
+        # Nút mở file
+        self.open_file_btn = Button(
+            button_frame,
+            text="📄 Mở File TXT",
+            command=self.open_txt_file,
+            font=('Segoe UI', 11, 'bold'),
+            bg='#2196F3',
+            fg='#ffffff',
+            activebackground='#0b7dda',
+            activeforeground='#ffffff',
+            relief=RAISED,
+            bd=3,
+            padx=20,
+            pady=10,
+            cursor='hand2'
+        )
+        self.open_file_btn.pack(side=LEFT, padx=5, fill=X, expand=True)
+        
+        # Hiển thị đường dẫn file
+        path_frame = Frame(main_frame, bg='#2b2b2b')
+        path_frame.pack(fill=X, pady=(0, 10))
+        
+        path_label_title = Label(
+            path_frame,
+            text="Đường dẫn file:",
+            font=('Segoe UI', 10, 'bold'),
+            bg='#2b2b2b',
+            fg='#ffffff'
+        )
+        path_label_title.pack(anchor=W)
+        
+        self.path_var = StringVar()
+        self.path_display = Label(
+            path_frame,
+            textvariable=self.path_var,
+            font=('Segoe UI', 9),
+            bg='#3c3c3c',
+            fg='#00ff88',
+            anchor=W,
+            padx=10,
+            pady=5,
+            relief=SUNKEN,
+            bd=1
+        )
+        self.path_display.pack(fill=X, pady=(5, 0))
+        
+        # Text box hiển thị nội dung
+        text_frame = LabelFrame(
+            main_frame,
+            text="Nội dung Tracklist",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#3c3c3c',
+            fg='#ffffff',
+            padx=10,
+            pady=10
+        )
+        text_frame.pack(fill=BOTH, expand=True)
+        
+        self.text_box = scrolledtext.ScrolledText(
+            text_frame,
+            height=20,
+            width=70,
+            font=('Consolas', 10),
+            bg='#1e1e1e',
+            fg='#d4d4d4',
+            insertbackground='#ffffff',
+            relief=SUNKEN,
+            bd=2,
+            wrap=WORD
+        )
+        self.text_box.pack(fill=BOTH, expand=True)
+        
+    def set_lap_count(self, count):
+        """Thiết lập số lần lặp và cập nhật giao diện"""
+        self.lap_count = count
+        
+        # Reset tất cả nút về màu mặc định
+        for btn in self.lap_buttons.values():
+            btn.configure(bg='#4a4a4a')
+        
+        # Đánh dấu nút được chọn
+        if count in self.lap_buttons:
+            self.lap_buttons[count].configure(bg=self.LAP_COLORS[count])
+        
+        # Cập nhật hiển thị
+        self.lap_display.config(text=f"Lần lặp hiện tại: {self.lap_count}")
+        
+    def format_time(self, seconds):
+        """Chuyển đổi giây thành (giờ, phút, giây)"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = seconds % 60
+        return (hours, minutes, int(secs))
+    
+    def get_txt_file_path(self, directory):
+        """Tạo đường dẫn file txt"""
+        file_name = 'AAAAAAA.txt'
+        file_path = os.path.join(directory, file_name)
+        return file_path
+    
+    def initialize_tracklist_file(self, file_path):
+        """Khởi tạo file tracklist"""
+        with open(file_path, 'w', encoding="utf-8") as f:
+            f.write("Tracklist:\n")
+    
+    def write_time_to_file(self, file_path, duration):
+        """Ghi thời gian vào file"""
+        hours, minutes, seconds = self.format_time(duration)
+        delta = datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
+        with open(file_path, 'a', encoding="utf-8") as f:
+            f.write(str(delta) + " ")
+    
+    def get_file_duration(self, file_path):
+        """Lấy độ dài của file MP3 hoặc MP4"""
+        if file_path.endswith(".mp3"):
+            try:
+                audio = MP3(file_path)
+                return audio.info.length
+            except Exception as e:
+                print(f"Lỗi đọc file MP3 {file_path}: {e}")
+                return 0
+        elif file_path.endswith(".mp4"):
+            try:
+                cap = cv2.VideoCapture(file_path)
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                cap.release()
+                if fps > 0:
+                    return frame_count / fps
+                return 0
+            except Exception as e:
+                print(f"Lỗi đọc file MP4 {file_path}: {e}")
+                return 0
+        return 0
+    
+    def get_file_name_without_extension(self, file_path):
+        """Lấy tên file không có extension"""
+        name = os.path.basename(file_path)
+        return os.path.splitext(name)[0]
+    
+    def process_files(self, directory, txt_file_path):
+        """Xử lý tất cả các file trong thư mục"""
+        for root_dir, dirs, files in os.walk(os.path.abspath(directory)):
+            for file in files:
+                file_path = os.path.join(root_dir, file)
+                
+                if file.endswith((".mp3", ".mp4")):
+                    # Ghi tên file
+                    name = self.get_file_name_without_extension(file_path)
+                    with open(txt_file_path, 'a', encoding="utf-8") as f:
+                        f.write(name + "\n")
+                    
+                    # Cập nhật duration và ghi thời gian
+                    file_duration = self.get_file_duration(file_path)
+                    self.duration += file_duration
+                    self.write_time_to_file(txt_file_path, self.duration)
+    
+    def remove_last_chars(self, file_path, num_chars=9):
+        """Xóa số ký tự cuối cùng của file"""
+        try:
+            with open(file_path, "rb+") as f:
+                f.seek(-num_chars, os.SEEK_END)
+                f.truncate()
+        except Exception as e:
+            print(f"Lỗi xóa ký tự cuối: {e}")
+    
+    def process_loop(self, txt_file_path, directory):
+        """Xử lý một lần lặp"""
+        self.write_time_to_file(txt_file_path, self.duration)
+        self.process_files(directory, txt_file_path)
+        self.remove_last_chars(txt_file_path)
+    
+    def process_tracklist(self):
+        """Hàm chính xử lý tracklist"""
+        directory = filedialog.askdirectory(title="Chọn thư mục chứa nhạc")
+        if not directory:
+            return
+        
+        # Reset duration
+        self.duration = 0
+        
+        # Tạo file txt
+        txt_file_path = self.get_txt_file_path(directory)
+        self.current_file_path = txt_file_path
+        self.path_var.set(txt_file_path)
+        
+        # Khởi tạo file
+        self.initialize_tracklist_file(txt_file_path)
+        
+        # Xử lý các lần lặp
+        for _ in range(self.lap_count):
+            self.process_loop(txt_file_path, directory)
+        
+        # Ghi tổng thời gian
+        hours, minutes, seconds = self.format_time(self.duration)
+        delta = datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
+        with open(txt_file_path, 'a', encoding="utf-8") as f:
+            f.write(str(delta))
+        
+        # Reset
+        self.duration = 0
+        self.lap_count = 1
+        self.set_lap_count(1)
+        
+        # Hiển thị thông báo
+        self.text_box.delete("1.0", END)
+        self.text_box.insert(END, f"✅ Đã tạo tracklist thành công!\n")
+        self.text_box.insert(END, f"📁 File: {txt_file_path}\n")
+        self.text_box.insert(END, f"🔄 Số lần lặp: {self.lap_count}\n")
+        self.text_box.insert(END, f"⏱️ Tổng thời gian: {delta}\n")
+        
+    def open_txt_file(self):
+        """Mở và hiển thị file txt"""
+        if self.current_file_path and os.path.exists(self.current_file_path):
+            file_path = self.current_file_path
+        else:
+            file_path = filedialog.askopenfilename(
+                title="Chọn file TXT",
+                filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+            )
+        
+        if file_path:
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    contents = f.read()
+                    self.text_box.delete("1.0", END)
+                    self.text_box.insert(END, contents)
+                    self.path_var.set(file_path)
+                    self.current_file_path = file_path
+            except Exception as e:
+                self.text_box.delete("1.0", END)
+                self.text_box.insert(END, f"❌ Lỗi đọc file: {e}")
 
 
 def main():
-    global duration
-    global lap
-    path = open_file()
-    file_txt = filetxt(path)
-    file_goc(file_txt)
-    for i in range(lap):
-        loop(file_txt, path)
-    ghi_total_file(file_txt)
-    duration = 0
-    lap = 1
+    root = Tk()
+    app = TracklistApp(root)
+    root.mainloop()
 
 
-def lap_2():
-    global lap
-    lap = 2
-    lap_2.configure(bg='#ff0000')
-
-
-def lap_3():
-    global lap
-    lap = 3
-    lap_3.configure(bg='#ff9d00')
-
-
-def lap_4():
-    global lap
-    lap = 4
-    lap_4.configure(bg='yellow')
-
-
-def lap_5():
-    global lap
-    lap = 5
-    lap_5.configure(bg='#00ff1a')
-
-
-def lap_6():
-    global lap
-    lap = 6
-    lap_6.configure(bg='#00ddff')
-
-
-def lap_7():
-    global lap
-    lap = 7
-    lap_7.configure(bg='#4B0082')
-
-
-def lap_8():
-    global lap
-    lap = 8
-    lap_8.configure(bg='#c800ff')
-
-
-def lap_9():
-    global lap
-    lap = 9
-    lap_9.configure(bg='#c800ff')
-
-
-def lap_10():
-    global lap
-    lap = 10
-    lap_10.configure(bg='#ff0066')
-
-
-label = Label(t, text="chọn số lần lặp")
-label.pack(side="left")
-
-lap_2 = Button(t, text="2", command=lap_2)
-lap_2.pack(side="left")
-lap_3 = Button(t, text="3", command=lap_3)
-lap_3.pack(side="left")
-lap_4 = Button(t, text="4", command=lap_4)
-lap_4.pack(side="left")
-lap_5 = Button(t, text="5", command=lap_5)
-lap_5.pack(side="left")
-lap_6 = Button(t, text="6", command=lap_6)
-lap_6.pack(side="left")
-lap_7 = Button(t, text="7", command=lap_7)
-lap_7.pack(side="left")
-lap_8 = Button(t, text="8", command=lap_8)
-lap_8.pack(side="left")
-lap_9 = Button(t, text="9", command=lap_9)
-lap_9.pack(side="left")
-lap_10 = Button(t, text="10", command=lap_10)
-lap_10.pack(side="left")
-
-main = Button(t, text="chọn foder lưu nhạc", command=main)
-main.pack()
-
-open_file_button = Button(t, text="mở file txt vừa run", command=o_file)
-open_file_button.pack()
-
-path_var = StringVar()
-path_label = Label(t, textvariable=path_var)
-path_label.pack()
-
-text_box = Text(t, height=30, width=50)
-text_box.pack()
-
-t.mainloop()
+if __name__ == "__main__":
+    main()
