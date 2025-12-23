@@ -129,7 +129,7 @@ class TracklistApp:
         # Nút chọn folder
         self.select_folder_btn = Button(
             button_frame,
-            text="📁 Chọn Folder Lưu Nhạc",
+            text="📁 Folder Chọn Nhạc",
             command=self.process_tracklist,
             font=('Segoe UI', 11, 'bold'),
             bg='#4CAF50',
@@ -143,6 +143,24 @@ class TracklistApp:
             cursor='hand2'
         )
         self.select_folder_btn.pack(side=LEFT, padx=5, fill=X, expand=True)
+        
+        # Nút copy nội dung
+        self.copy_btn = Button(
+            button_frame,
+            text="📋 Copy Tracklist",
+            command=self.copy_tracklist,
+            font=('Segoe UI', 11, 'bold'),
+            bg='#FF9800',
+            fg='#ffffff',
+            activebackground='#F57C00',
+            activeforeground='#ffffff',
+            relief=RAISED,
+            bd=3,
+            padx=20,
+            pady=10,
+            cursor='hand2'
+        )
+        self.copy_btn.pack(side=LEFT, padx=5, fill=X, expand=True)
         
         # Nút mở file
         self.open_file_btn = Button(
@@ -404,10 +422,51 @@ class TracklistApp:
         self.text_box.insert(END, f"✅ Đã tạo tracklist thành công!\n")
         self.text_box.insert(END, f"📁 File: {txt_file_path}\n")
         self.text_box.insert(END, f"🔄 Số lần lặp: {self.lap_count}\n")
-        self.text_box.insert(END, f"⏱️ Tổng thời gian: {total_delta}\n")
+        self.text_box.insert(END, f"⏱️ Tổng thời gian: {total_delta}\n\n")
         
+        # Tự động hiển thị nội dung file txt trong text box
+        try:
+            with open(txt_file_path, "r", encoding="utf-8") as f:
+                contents = f.read()
+                self.text_box.insert(END, contents)
+        except Exception as e:
+            self.text_box.insert(END, f"\n❌ Lỗi đọc file: {e}")
+        
+    def copy_tracklist(self):
+        """Copy nội dung tracklist vào clipboard (chỉ phần tracklist, không bao gồm thông báo)"""
+        try:
+            # Ưu tiên đọc từ file txt nếu có
+            tracklist_content = ""
+            if self.current_file_path and os.path.exists(self.current_file_path):
+                with open(self.current_file_path, "r", encoding="utf-8") as f:
+                    tracklist_content = f.read().strip()
+            else:
+                # Nếu không có file, tìm từ dòng "Tracklist:" trong text box
+                all_content = self.text_box.get("1.0", END)
+                lines = all_content.split('\n')
+                tracklist_start = -1
+                for i, line in enumerate(lines):
+                    if line.strip().startswith("Tracklist:"):
+                        tracklist_start = i
+                        break
+                
+                if tracklist_start >= 0:
+                    tracklist_content = '\n'.join(lines[tracklist_start:]).strip()
+            
+            if tracklist_content:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(tracklist_content)
+                # Hiển thị thông báo tạm thời
+                self.text_box.insert(END, "\n\n✅ Đã copy tracklist vào clipboard!")
+                self.root.after(2000, lambda: self.text_box.delete("end-2l", "end-1l"))
+            else:
+                self.text_box.insert(END, "\n\n⚠️ Không có nội dung tracklist để copy!")
+                self.root.after(2000, lambda: self.text_box.delete("end-2l", "end-1l"))
+        except Exception as e:
+            self.text_box.insert(END, f"\n\n❌ Lỗi copy: {e}")
+    
     def open_txt_file(self):
-        """Mở và hiển thị file txt"""
+        """Mở file txt bằng ứng dụng mặc định"""
         if self.current_file_path and os.path.exists(self.current_file_path):
             file_path = self.current_file_path
         else:
@@ -418,15 +477,12 @@ class TracklistApp:
         
         if file_path:
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    contents = f.read()
-                    self.text_box.delete("1.0", END)
-                    self.text_box.insert(END, contents)
-                    self.path_var.set(file_path)
-                    self.current_file_path = file_path
+                os.startfile(file_path)
+                self.path_var.set(file_path)
+                self.current_file_path = file_path
             except Exception as e:
                 self.text_box.delete("1.0", END)
-                self.text_box.insert(END, f"❌ Lỗi đọc file: {e}")
+                self.text_box.insert(END, f"❌ Lỗi mở file: {e}")
 
 
 def main():
